@@ -1,14 +1,14 @@
-import re
 import time
 import random
+from dataclasses import dataclass
 from playwright.sync_api import (
     sync_playwright,
     TimeoutError as PlaywrightTimeoutError,
     Error as PlaywrightError,
 )
 
-login_url = "https://my-kana-learning-app.web.app/index.html#login-screen"
-main_url = "https://my-kana-learning-app.web.app/index.html#main-menu-screen"
+LOGIN_URL = "https://my-kana-learning-app.web.app/index.html#login-screen"
+MAIN_URL = "https://my-kana-learning-app.web.app/index.html#main-menu-screen"
 
 KANA_MAP = {
     "あ": "a",
@@ -226,43 +226,38 @@ KANA_MAP = {
 
 ALL_ROMAJI_VALUES = list(set(KANA_MAP.values()))
 
-bot_level = [[3000, 5000], [2000, 4000], [1000, 3000], [500, 1500], [300, 400]]
+BOT_LEVEL_DELAYS_MS = {
+    1: (3000, 5000),
+    2: (2000, 4000),
+    3: (1000, 3000),
+    4: (500, 1500),
+    5: (300, 400),
+}
 
 
-def get_valid_level(default=5):
-    raw = input(
-        "Please enter the level you want to practice (1-5) or leave it blank for default level 5: "
-    ).strip()
+@dataclass
+class Settings:
+    level: int
+    duration_seconds: float
+    correct_rate: int
+
+
+def prompt_int_in_range(prompt, low, high, default):
+    raw = input(prompt).strip()
     if raw == "":
         return default
     try:
-        level = int(raw)
+        value = int(raw)
     except ValueError:
-        print(f"'{raw}' isn't a number — using default level {default}.")
+        print(f"'{raw}' isn't a number — using default {default}.")
         return default
-    if level < 1 or level > 5:
-        print(f"{level} is out of range (1-5) — using default level {default}.")
+    if value < low or value > high:
+        print(f"{value} is out of range ({low}-{high}) — using default {default}.")
         return default
-    return level
+    return value
 
 
-def get_valid_correct_rate(default=100):
-    raw = input(
-        f"Please enter the correct rate (0-100) or leave it blank for default {default}: "
-    ).strip()
-    if raw == "":
-        return default
-    try:
-        rate = int(raw)
-        if rate < 0 or rate > 100:
-            raise ValueError
-    except ValueError:
-        print(f"'{raw}' isn't valid — using default correct rate {default}.")
-        return default
-    return rate
-
-
-def get_valid_duration(default_minutes=10):
+def prompt_duration_minutes(default_minutes=10):
     raw = input(
         f"Please enter the minutes that the practice should run for (1-10) or leave it blank for default {default_minutes}: "
     ).strip()
@@ -278,6 +273,23 @@ def get_valid_duration(default_minutes=10):
     return minutes * 60
 
 
+def get_settings():
+    level = prompt_int_in_range(
+        "Please enter the level you want to practice (1-5) or leave it blank for default level 5: ",
+        1,
+        5,
+        5,
+    )
+    duration = prompt_duration_minutes(default_minutes=10)
+    correct_rate = prompt_int_in_range(
+        "Please enter the correct rate (0-100) or leave it blank for default 100: ",
+        0,
+        100,
+        100,
+    )
+    return Settings(level=level, duration_seconds=duration, correct_rate=correct_rate)
+
+
 def safe_click(locator, description, timeout=5000):
     try:
         locator.click(timeout=timeout)
@@ -286,17 +298,6 @@ def safe_click(locator, description, timeout=5000):
         print(f"Could not find/click '{description}' in time — skipping.")
     except PlaywrightError as e:
         print(f"Error clicking '{description}': {e}")
-    return False
-
-
-def wait_for_url_contains(page, fragment, timeout_ms, description):
-    try:
-        page.wait_for_url(re.compile(re.escape(fragment)), timeout=timeout_ms)
-        return True
-    except PlaywrightTimeoutError:
-        print(f"Timed out waiting for '{description}'.")
-    except PlaywrightError as e:
-        print(f"Error waiting for '{description}': {e}")
     return False
 
 
@@ -316,25 +317,101 @@ def get_wrong_answer(correct_romaji):
     return random.choice(candidates)
 
 
-if __name__ == "__main__":
-    level = get_valid_level(default=5)
-    duration = get_valid_duration(default_minutes=10)
-    correct_rate = get_valid_correct_rate(default=100)
+class PracticeSession:
+    def __init__(self, page, settings):
+        self.page = page
+        self.settings = settings
+        self.total_questions = 0
+        self.correct_questions = 0
 
-    total_questions = 0
-    correct_questions = 0
+    def next_answer(self, correct_romaji):
+        self.total_questions += 1
+        expected_rate = ((self.correct_questions + 1) / self.total_questions) * 100
+
+        if expected_rate <= self.settings.correct_rate:
+            self.correct_questions += 1
+            return correct_romaji
+
+        return get_wrong_answer(correct_romaji)
+
+    def undo_last_question(self, was_correct):
+        self.total_questions -= 1
+        if was_correct:
+            self.correct_questions -= 1
+
+    def submit(self, answer):
+        self.page.locator("#answer-input").fill(answer, timeout=3000)
+        safe_click(self.page.locator("#submit-answer-btn"), "submit answer")
+        try:
+            confirm_btn = self.page.get_by_role("button", name="確認", exact=False)
+            if confirm_btn.is_visible(timeout=100):
+                confirm_btn.click(timeout=1000)
+        except PlaywrightError:
+            pass
+
+    def random_delay(self):
+        low, high = BOT_LEVEL_DELAYS_MS[self.settings.level]
+        self.page.wait_for_timeout(random.randint(low, high))
+
+    def run(self):
+        end_time = time.time() + self.settings.duration_seconds
+
+        while time.time() < end_time:
+            if not self.page.context.browser.is_connected():
+                print("Browser was closed — stopping.")
+                break
+
+            try:
+                current_kana = (
+                    self.page.locator("#question-display")
+                    .inner_text(timeout=3000)
+                    .strip()
+                )
+            except PlaywrightTimeoutError:
+                print("Question display not found — retrying.")
+                self.page.wait_for_timeout(500)
+                continue
+            except PlaywrightError as e:
+                print(f"Lost connection to the page ({e}) — stopping.")
+                break
+
+            correct_romaji = KANA_MAP.get(current_kana)
+            if correct_romaji is None:
+                print(
+                    f"Unrecognized character: '{current_kana}' — waiting before re-checking."
+                )
+                self.page.wait_for_timeout(500)
+                continue
+
+            answer = self.next_answer(correct_romaji)
+            was_correct = answer == correct_romaji
+
+            try:
+                self.submit(answer)
+            except PlaywrightTimeoutError:
+                print("Answer input/submit button not found — retrying next loop.")
+                self.undo_last_question(was_correct)
+            except PlaywrightError as e:
+                print(f"Error submitting answer: {e} — retrying next loop.")
+                self.undo_last_question(was_correct)
+
+            self.random_delay()
+
+
+def main():
+    settings = get_settings()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
-        page.goto(login_url)
+        page.goto(LOGIN_URL)
 
         input(
             "Complete the Google login in the opened window. Press Enter here once you're signed in and ready to go to the main menu..."
         )
 
         try:
-            page.goto(main_url)
+            page.goto(MAIN_URL)
         except PlaywrightError as e:
             print(f"Error navigating to main menu: {e}")
             browser.close()
@@ -357,77 +434,9 @@ if __name__ == "__main__":
             browser.close()
             raise SystemExit(1)
 
-        end_time = time.time() + duration
-
+        session = PracticeSession(page, settings)
         try:
-            while time.time() < end_time:
-                if not browser.is_connected():
-                    print("Browser was closed — stopping.")
-                    break
-
-                try:
-                    current_kana = (
-                        page.locator("#question-display")
-                        .inner_text(timeout=3000)
-                        .strip()
-                    )
-                    correct_romaji = KANA_MAP.get(current_kana)
-                except PlaywrightTimeoutError:
-                    print("Question display not found — retrying.")
-                    page.wait_for_timeout(500)
-                    continue
-                except PlaywrightError as e:
-                    print(f"Lost connection to the page ({e}) — stopping.")
-                    break
-
-                if correct_romaji:
-                    total_questions += 1
-                    expected_rate = ((correct_questions + 1) / total_questions) * 100
-
-                    if expected_rate <= correct_rate:
-                        answer_to_send = correct_romaji
-                        correct_questions += 1
-                        is_this_turn_correct = True
-                    else:
-                        answer_to_send = get_wrong_answer(correct_romaji)
-                        is_this_turn_correct = False
-
-                    current_actual_rate = (correct_questions / total_questions) * 100
-
-                    try:
-                        page.locator("#answer-input").fill(answer_to_send, timeout=3000)
-                        safe_click(page.locator("#submit-answer-btn"), "submit answer")
-
-                        try:
-                            confirm_btn = page.get_by_role(
-                                "button", name="確認", exact=False
-                            )
-                            if confirm_btn.is_visible(timeout=100):
-                                confirm_btn.click(timeout=1000)
-                        except PlaywrightError:
-                            pass
-
-                    except PlaywrightTimeoutError:
-                        print(
-                            "Answer input/submit button not found — retrying next loop."
-                        )
-                        total_questions -= 1
-                        if is_this_turn_correct:
-                            correct_questions -= 1
-                    except PlaywrightError as e:
-                        print(f"Error submitting answer: {e} — retrying next loop.")
-                        total_questions -= 1
-                        if is_this_turn_correct:
-                            correct_questions -= 1
-
-                    random_delay = random.randint(*bot_level[level - 1])
-                    page.wait_for_timeout(random_delay)
-                else:
-                    print(
-                        f"Unrecognized character: '{current_kana}' — waiting before re-checking."
-                    )
-                    page.wait_for_timeout(500)
-
+            session.run()
         except KeyboardInterrupt:
             print("Interrupted by user — stopping cleanly.")
         except PlaywrightError as e:
@@ -436,3 +445,7 @@ if __name__ == "__main__":
         print("Practice session finished. Closing browser in 1 minute...")
         page.wait_for_timeout(60000)
         browser.close()
+
+
+if __name__ == "__main__":
+    main()
