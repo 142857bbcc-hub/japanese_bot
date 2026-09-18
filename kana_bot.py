@@ -406,9 +406,37 @@ def main():
         page = browser.new_page()
         page.goto(LOGIN_URL)
 
-        input(
-            "Complete the Google login in the opened window. Press Enter here once you're signed in and ready to go to the main menu..."
-        )
+        login_timeout = 120
+        start_time = time.time()
+
+        while time.time() - start_time < login_timeout:
+            try:
+                welcome_message = page.locator("#welcome-message")
+                welcome_text = welcome_message.text_content(timeout=1000)
+
+                if welcome_text and welcome_text.strip():
+                    break
+
+                modal = page.locator("#modal")
+                if modal.is_visible(timeout=100):
+                    modal_message = page.locator("#modal-message").text_content(
+                        timeout=1000
+                    )
+
+                    if modal_message and "登入失敗" in modal_message:
+                        print(f"Google login failed: {modal_message.strip()}")
+                        browser.close()
+                        raise SystemExit(1)
+
+                page.wait_for_timeout(500)
+
+            except PlaywrightError:
+                page.wait_for_timeout(500)
+
+        else:
+            print("Google login timed out.")
+            browser.close()
+            raise SystemExit(1)
 
         try:
             page.goto(MAIN_URL)
@@ -424,9 +452,6 @@ def main():
             browser.close()
             raise SystemExit(1)
 
-        print(
-            "Choose your test range in the browser window, then press 開始練習 there. The script will detect it automatically and start answering."
-        )
         if not wait_for_selector_visible(
             page, "#question-display", 10 * 60 * 1000, "practice session start"
         ):
@@ -435,6 +460,7 @@ def main():
             raise SystemExit(1)
 
         session = PracticeSession(page, settings)
+
         try:
             session.run()
         except KeyboardInterrupt:
