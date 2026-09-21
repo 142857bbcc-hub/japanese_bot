@@ -1,2 +1,3 @@
-/.venv
-/.vscode
+.vscode/
+.venv/
+kana_bot
