@@ -4,8 +4,9 @@ set -euo pipefail
 
 APP_NAME="kana_bot"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_FILE="${1:-$SCRIPT_DIR/kana_bot.py}"
-OUTPUT_FILE="$SCRIPT_DIR/$APP_NAME"
+SOURCE_FILE="${1:-$SCRIPT_DIR/main.py}"
+OUTPUT_DIR="$SCRIPT_DIR/dist"
+OUTPUT_FILE="$OUTPUT_DIR/$APP_NAME"
 
 if [ ! -f "$SOURCE_FILE" ]; then
     echo "Error: source file not found: $SOURCE_FILE"
@@ -32,7 +33,7 @@ source "$BUILD_DIR/venv/bin/activate"
 
 echo "==> Installing dependencies (playwright, pyinstaller)..."
 python -m pip install --quiet --upgrade pip
-python -m pip install --quiet playwright pyinstaller
+python -m pip install --quiet -r "$SCRIPT_DIR/requirements.txt" pyinstaller
 
 echo "==> Installing the Playwright Chromium browser..."
 python -m playwright install chromium
@@ -61,6 +62,7 @@ python -m PyInstaller \
     --onefile \
     --name "$APP_NAME" \
     --collect-all playwright \
+    --paths "$SCRIPT_DIR" \
     --runtime-hook "$BUILD_DIR/rthook_playwright.py" \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \
@@ -72,7 +74,8 @@ if [ ! -f "$BUILD_DIR/dist/$APP_NAME" ]; then
     exit 1
 fi
 
-echo "==> Placing executable in $SCRIPT_DIR ..."
+mkdir -p "$OUTPUT_DIR"
+echo "==> Placing executable in $OUTPUT_DIR ..."
 if [ -e "$OUTPUT_FILE" ]; then
     echo "    Existing $APP_NAME found - replacing it."
     rm -f "$OUTPUT_FILE"
