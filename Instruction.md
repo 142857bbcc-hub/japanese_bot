@@ -10,6 +10,7 @@ kana_bot/
   config.py             網址、等級延遲等常數
   kana_map.py           假名對照表
 build_kana_bot.sh       mac 編譯成執行檔（輸出到 dist/kana_bot）
+build_kana_bot.bat      windows 編譯成執行檔（輸出到 dist\kana_bot.exe）
 requirements.txt
 ```
 
@@ -35,3 +36,13 @@ build_kana_bot.sh可以留給mac的朋友們自己編譯\
 chmod +x build_kana_bot.sh\
 ./build_kana_bot.sh\
 執行檔會在 dist/kana_bot
+
+## 編譯 (windows)
+
+build_kana_bot.bat 給 windows 的朋友們自己編譯（需要先裝好 python，安裝時記得勾 Add python to PATH）\
+直接雙擊 build_kana_bot.bat，或在 cmd 進到專案資料夾輸入\
+build_kana_bot.bat\
+執行檔會在 dist\kana_bot.exe
+
+註：執行檔不包含瀏覽器，第一次編譯時會自動下載 Chromium 到 %LOCALAPPDATA%\ms-playwright，\
+如果要把 exe 給沒編譯過的電腦用，那台電腦要先執行 pip install playwright 和 playwright install chromium
