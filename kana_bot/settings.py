@@ -4,7 +4,6 @@ from dataclasses import dataclass
 @dataclass
 class Settings:
     level: int
-    duration_seconds: float
     correct_rate: int
 
 
@@ -23,22 +22,6 @@ def prompt_int_in_range(prompt, low, high, default):
     return value
 
 
-def prompt_duration_minutes(default_minutes=10):
-    raw = input(
-        f"Please enter the minutes that the practice should run for (1-10) or leave it blank for default {default_minutes}: "
-    ).strip()
-    if raw == "":
-        return default_minutes * 60
-    try:
-        minutes = float(raw)
-        if minutes <= 0:
-            raise ValueError
-    except ValueError:
-        print(f"'{raw}' isn't valid — using default {default_minutes} minutes.")
-        return default_minutes * 60
-    return minutes * 60
-
-
 def get_settings():
     level = prompt_int_in_range(
         "Please enter the level you want to practice (1-5) or leave it blank for default level 5: ",
@@ -46,14 +29,13 @@ def get_settings():
         5,
         5,
     )
-    duration = prompt_duration_minutes(default_minutes=10)
     correct_rate = prompt_int_in_range(
         "Please enter the correct rate (0-100) or leave it blank for default 100: ",
         0,
         100,
         100,
     )
-    return Settings(level=level, duration_seconds=duration, correct_rate=correct_rate)
+    return Settings(level=level, correct_rate=correct_rate)
 
 
 def prompt_yes_no(prompt, default=True):

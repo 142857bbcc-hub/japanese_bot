@@ -1,8 +1,7 @@
 from playwright.sync_api import sync_playwright, Error as PlaywrightError
 
-from kana_bot.config import APP_PRACTICE_LIMIT_SECONDS
 from kana_bot.settings import get_settings, prompt_yes_no
-from kana_bot.browser import wait_for_login, open_practice, exit_practice
+from kana_bot.browser import wait_for_login, open_practice
 from kana_bot.session import PracticeSession
 
 
@@ -18,13 +17,7 @@ def run_practice(page, settings):
     except PlaywrightError as e:
         print(f"Unexpected Playwright error: {e}")
 
-    if not page.context.browser.is_connected():
-        return False
-
-    if settings.duration_seconds < APP_PRACTICE_LIMIT_SECONDS:
-        exit_practice(page)
-
-    return True
+    return page.context.browser.is_connected()
 
 
 def main():

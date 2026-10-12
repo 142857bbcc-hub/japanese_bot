@@ -6,7 +6,7 @@ from playwright.sync_api import (
     Error as PlaywrightError,
 )
 
-from kana_bot.config import BOT_LEVEL_DELAYS_MS
+from kana_bot.config import BOT_LEVEL_DELAYS_MS, PRACTICE_DURATION_SECONDS
 from kana_bot.kana_map import KANA_MAP, ALL_ROMAJI_VALUES
 from kana_bot.browser import safe_click, click_confirm_if_present
 
@@ -48,7 +48,7 @@ class PracticeSession:
         self.page.wait_for_timeout(random.randint(low, high))
 
     def run(self):
-        end_time = time.time() + self.settings.duration_seconds
+        end_time = time.time() + PRACTICE_DURATION_SECONDS
 
         while time.time() < end_time:
             if not self.page.context.browser.is_connected():

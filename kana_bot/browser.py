@@ -89,12 +89,3 @@ def open_practice(page):
         return False
 
     return True
-
-
-def exit_practice(page):
-    if not safe_click(
-        page.get_by_role("button", name="暫停並退出"), "暫停並退出 (pause and exit)"
-    ):
-        return False
-    click_confirm_if_present(page)
-    return True
