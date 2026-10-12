@@ -9,6 +9,7 @@ from kana_bot.config import (
     LOGIN_URL,
     MAIN_URL,
     LOGIN_TIMEOUT_SECONDS,
+    APP_PRACTICE_LIMIT_SECONDS,
 )
 
 
@@ -82,7 +83,10 @@ def open_practice(page):
 
     print("Choose your practice options in the browser and start the practice.")
     if not wait_for_selector_visible(
-        page, "#question-display", PRACTICE_START_TIMEOUT_MS, "practice session start"
+        page,
+        "#question-display",
+        APP_PRACTICE_LIMIT_SECONDS * 1000,
+        "practice session start",
     ):
         print("Practice session start wasn't detected.")
         return False
