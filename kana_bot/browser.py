@@ -9,7 +9,6 @@ from kana_bot.config import (
     LOGIN_URL,
     MAIN_URL,
     LOGIN_TIMEOUT_SECONDS,
-    PRACTICE_START_TIMEOUT_MS,
 )
 
 
@@ -88,4 +87,13 @@ def open_practice(page):
         print("Practice session start wasn't detected.")
         return False
 
+    return True
+
+
+def exit_practice(page):
+    if not safe_click(
+        page.get_by_role("button", name="暫停並退出"), "暫停並退出 (pause and exit)"
+    ):
+        return False
+    click_confirm_if_present(page)
     return True
